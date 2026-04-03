@@ -1,44 +1,104 @@
 #firstly columns available in orders 
 sale_id	customer_id	product_id	sale_date	quantity	total_amount
-
+------------------------------------------------------------------------
 #columns available in customers
 customer_id	first_name	last_name	email	phone_number	address	city	state	zip_code
-
-#first Query
+---------------------------------------------------------------------------------------------
+#query 1
 Total order amount for each customer
-
+---------------------------------------------------------------------------------------------
 # Initialize Spark session
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import count,sum,col ,avg
 spark = SparkSession.builder.appName('Spark Playground').getOrCreate()
-
+----------------------------------------------------------------------------------------------
 # Load the customers.csv dataset
 customers = spark.read.format('csv').option('header', 'true').load('/samples/customers.csv')
 orders = spark.read.format('csv').option('header', 'true').load('/samples/sales.csv')
-
+------------------------------------------------------------------------------------------------
 #Dropping Null Values
 customers = customers.dropna(subset=["customer_id"])
 orders = orders.dropna(subset=["customer_id"])
-
-=>sql
+-----------------------------------------------------------------------------------------------
+=>sql query for Total order amount for each customer
 SELECT c.customer_id,c.first_name,c.last_name,
 SUM(s.total_amount)
 FROM customers c
 LEFT JOIN sales s
 ON c.customer_id = s.customer_id
 GROUP BY c.customer_id, c.first_name, c.last_name;
-
-=>pyspark
+-------------------------------------------------------------------------------------------------------
+=>pyspark query for Total order amount for each customer
 #Joined Tables using left join
 #for joining we have taken first table.join(table we want to join,primarykey,which join that we want to use)
-
 joined_df = customers.join(orders, "customer_id", "left")
-
+----------------------------------------------------------------------------------------------------------------------------------
 #now grouping using groupby and aggregation we used is sum and coalesce(..., lit(0))  Replaces NULL with 0 to rename we used alias
-
 df = joined_df.groupBy("customer_id", "first_name", "last_name") \
     .agg(coalesce(sum("total_amount"), lit(0)).alias("total_order_amount"))
-    
+-----------------------------------------------------------------------------------------------------------------------------------    
 #to print we use display
-
 display(df)
+--------------------------------------
+query2:Top 3 customers by total spend+
+--------------------------------------
+Sql query Top 3 customers by total spend:
+SELECT  c.customer_id, c.first_name, c.last_name,
+SUM(s.total_amount) AS total_spend
+FROM customers c
+JOIN sales s
+ON c.customer_id = s.customer_id
+GROUP BY c.customer_id, c.first_name, c.last_name
+ORDER BY total_spend DESC
+LIMIT 3;
+--------------------------------------------------
+query3:Top 3 customers by total spend
+--------------------------------------------------
+pyspark query Top 3 customers by total spend:
+joined_df = customers.join(orders, "customer_id", "left")
+df = (
+    joined_df.groupBy("customer_id", "first_name", "last_name")
+    .agg(coalesce(sum("total_amount"), lit(0)).alias("total_order_amount"))
+    .orderBy("total_order_amount", ascending=False) 
+    .limit(3)
+)
+
+(or)
+
+joined_df = customers.join(orders, "customer_id", "left")
+df = (
+    joined_df.groupBy("customer_id", "first_name", "last_name")
+    .agg(sum("total_amount").alias("total_order_amount"))
+    .orderBy("total_order_amount", ascending=False) 
+    .limit(3)
+)
+------------------------------------------------------------------------------------
+query 4: City-wise total revenue
+------------------------------------------------------------------------------------
+df = customers.join(orders, "customer_id", "left") \
+    .groupBy("city")\
+    .agg(sum("total_amount").alias("citywise_totalRevenue"))
+display(df)
+-------------------------------------------------------------------------------------
+query 5:Average order amount per customer
+-------------------------------------------------------------------------------------
+df=  customers.join(orders, "customer_id", "left") \
+    .groupBy("customer_id","first_name","last_name")\
+    .agg(avg("total_amount").alias("avg_orderamount_percustomer")
+display(df)
+--------------------------------------------------------------------------------------
+query 6:Customers with more than one order
+--------------------------------------------------------------------------------------
+df = orders.groupBy("customer_id") \
+    .agg(count("*").alias("order_count")) \
+    .filter("order_count > 1")
+display(df)
+---------------------------------------------------------------------------------------
+query 7:Sort customers by total spend descending
+---------------------------------------------------------------------------------------
+df = customers.join(orders, "customer_id") \
+    .groupBy("customer_id", "first_name", "last_name") \
+    .agg(sum("total_amount").alias("total_spend")) \
+    .orderBy("total_spend", ascending=False)
+display(df)
+----------------------------------------------------------------------------------------
