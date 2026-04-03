@@ -124,3 +124,9 @@ All outputs are validated and displayed using `display()` in Databricks.
 ## 🔹 Notes
 
 This phase focuses on applying transformation logic similar to real-world data engineering pipelines, where combining datasets and generating insights is a key responsibility. PySpark enables scalable and efficient data processing for large datasets.
+
+---
+
+## 🔹 Author
+
+Jagatha Nandini
