@@ -1,0 +1,91 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+
+spark = SparkSession.builder.getOrCreate()
+
+# =========================
+# Dirty Customers Dataset
+# =========================
+
+customers_data = [
+    (1, "John Doe", "john@example.com", "Hyderabad"),
+    (2, "Alice ", "alice@example.com", "Chennai"),
+    (3, None, "bob@example.com", "Bangalore"),        # NULL name
+    (4, "David", None, "Mumbai"),                    # NULL email
+    (5, "Eva", "eva@example.com", "Hyderabad"),
+    (6, "Frank", "frank@example.com", "Delhi"),
+]
+
+customers = spark.createDataFrame(customers_data, ["customer_id", "name", "email", "city"])
+
+# =========================
+# Dirty Orders Dataset
+# =========================
+
+orders_data = [
+    (101, 1, "2024-01-01", 1000),
+    (102, 2, "2024-01-02", 2000),
+    (103, 3, "2024-01-03", -500),     # INVALID negative value
+    (104, 99, "2024-01-04", 1500),    # INVALID FK (customer_id 99)
+    (105, 1, "2024-01-05", None),     # NULL amount
+    (106, 5, "2024-01-06", 3000),
+    (107, 5, "2024-01-07", 3000),     # duplicate-like record
+]
+
+orders = spark.createDataFrame(orders_data, ["order_id", "customer_id", "order_date", "amount"])
+
+# =========================
+# Convert date column
+# =========================
+
+orders = orders.withColumn("order_date", to_date(col("order_date")))
+
+# Remove nulls (important columns)
+customers_clean = customers.dropna(subset=["name", "email"])
+orders_clean = orders.dropna(subset=["amount"])
+
+# Trim names
+customers_clean = customers_clean.withColumn("name", trim(col("name")))
+
+# Remove negative values
+orders_clean = orders_clean.filter(col("amount") > 0)
+
+# Find invalid customer_id (orders not matching customers)
+invalid_orders = orders_clean.join(
+    customers_clean,
+    "customer_id",
+    "left_anti"
+)
+
+display(invalid_orders)
+
+# Keep only valid records
+valid_orders = orders_clean.join(
+    customers_clean,
+    "customer_id",
+    "inner"
+)
+
+display(valid_orders)
+
+from pyspark.sql.functions import sum as _sum, count
+
+customer_metrics = valid_orders.groupBy("customer_id", "name", "city") \
+    .agg(
+        _sum("amount").alias("total_spend"),
+        count("order_id").alias("total_orders")
+    )
+
+display(customer_metrics)
+
+from pyspark.sql.window import Window
+from pyspark.sql.functions import dense_rank
+
+window_spec = Window.orderBy(col("total_spend").desc())
+
+ranked_customers = customer_metrics.withColumn(
+    "rank",
+    dense_rank().over(window_spec)
+)
+
+display(ranked_customers)
